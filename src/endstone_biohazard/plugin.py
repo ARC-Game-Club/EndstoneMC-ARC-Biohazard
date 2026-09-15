@@ -74,7 +74,6 @@ DEFAULTS = {
             "zombie:zombie_nemesis_1": 1,
             "zombie:zombie_nemesis_2": 1,
             "zombie:zombie_tyrant": 1,
-            "zombie:zombie_death_lord": 1,
         },
     },
 }
@@ -138,7 +137,9 @@ class BiohazardPlugin(Plugin):
         victim = getattr(event, "actor", None)
         if victim is None:
             return
-        killer = self._find_killer(getattr(event, "damage_source", None))
+        damage_source = getattr(event, "damage_source", None)
+        killer = self._find_killer(damage_source)
+        self.logger.info(f"[生化危机][生物死亡] {self._describe_death(victim, killer, damage_source)}")
         if killer is None or self._is_same_actor(killer, victim):
             return
         self._try_convert(victim, killer)
@@ -149,7 +150,9 @@ class BiohazardPlugin(Plugin):
         victim = getattr(event, "player", None)
         if victim is None:
             return
-        killer = self._find_killer(getattr(event, "damage_source", None))
+        damage_source = getattr(event, "damage_source", None)
+        killer = self._find_killer(damage_source)
+        self.logger.info(f"[生化危机][玩家死亡] {self._describe_death(victim, killer, damage_source)}")
         if killer is None or self._is_same_actor(killer, victim):
             return
         self._try_convert(victim, killer)
@@ -162,6 +165,9 @@ class BiohazardPlugin(Plugin):
         victim_type = self._type_id(victim)
         killer_type = self._type_id(killer)
         if not victim_type or not killer_type:
+            self.logger.warning(
+                f"[生化危机] 实体类型无法识别（击杀者={killer_type or '空'}，死者={victim_type or '空'}），跳过转化"
+            )
             return
         if not self._matches_any(killer_type, self._killer_patterns):
             return
@@ -170,6 +176,7 @@ class BiohazardPlugin(Plugin):
         if self._matches_any(victim_type, self._excluded_victims):
             return
         if not self._claim_victim(victim):
+            self.logger.info(f"[生化危机] 1 秒内重复的死亡事件，已忽略：{victim_type}")
             return
 
         pool_name = "humanoid" if self._matches_any(victim_type, self._humanoid_victims) else "default"
@@ -214,6 +221,16 @@ class BiohazardPlugin(Plugin):
             if candidate is not None:
                 return candidate
         return None
+
+    def _describe_death(self, victim, killer, damage_source) -> str:
+        """拼一条死亡事件描述，用于排查击杀链路（谁杀了谁 / 为何无击杀者）。"""
+        victim_type = self._type_id(victim) or "<类型无法识别>"
+        if killer is not None:
+            return f"{self._type_id(killer) or '<类型无法识别>'} 击杀了 {victim_type}"
+        source_type = getattr(damage_source, "type", None)
+        if source_type is not None:
+            return f"{victim_type} 死亡（无击杀者，伤害类别：{source_type}）"
+        return f"{victim_type} 死亡（无伤害来源）"
 
     @staticmethod
     def _type_id(actor) -> str:

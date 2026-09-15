@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "endstone-biohazard"
-version = "1.0.0"
+version = "1.0.1"
 description = "生化危机：丧尸击杀生物后感染转化为新丧尸（Endstone 插件）"
 readme = "README.md"
 requires-python = ">=3.11"
